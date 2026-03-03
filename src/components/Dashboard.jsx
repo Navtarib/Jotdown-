@@ -182,7 +182,7 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'trash' ? 'bg-primary/10' : ''}`}>
                     <Trash2 size={20} />
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider">Trash</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider">Trash</span>
             </button>
         </nav>
     );
