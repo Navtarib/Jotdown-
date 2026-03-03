@@ -1,0 +1,15 @@
+{
+    "short_name": "Jotdown",
+    "name": "Jotdown - Premium Note Taking",
+    "icons": [
+        {
+            "src": "vite.svg",
+            "type": "image/svg+xml",
+            "sizes": "192x192 512x512"
+        }
+    ],
+    "start_url": ".",
+    "display": "standalone",
+    "theme_color": "#facc15",
+    "background_color": "#ffffff"
+}
