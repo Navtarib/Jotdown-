@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import FeedDetail from './FeedDetail';
 import CommunityNoteCard from './CommunityNoteCard';
-import { Rss, Plus, Lock, ChevronRight, Users, Loader2, X, Globe, Sparkles } from 'lucide-react';
+import { Rss, Plus, Lock, ChevronRight, Users, Loader2, X, Globe, Sparkles, Image } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const NotesFeed = ({ user, onFeedsUpdate }) => {
+const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) => {
     const [myFeeds, setMyFeeds] = useState([]);
     const [invitedFeeds, setInvitedFeeds] = useState([]);
     const [selectedFeed, setSelectedFeed] = useState(null);
@@ -17,6 +17,14 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
     const [creating, setCreating] = useState(false);
     const [feedTab, setFeedTab] = useState('channels'); // 'channels' or 'community'
     const [publicNotes, setPublicNotes] = useState([]);
+
+    // Community post states
+    const [noteTitle, setNoteTitle] = useState('');
+    const [noteContent, setNoteContent] = useState('');
+    const [noteImageFile, setNoteImageFile] = useState(null);
+    const [noteImagePreview, setNoteImagePreview] = useState(null);
+    const [posting, setPosting] = useState(false);
+    const fileInputRef = useRef(null);
 
     // Automatically link invited_email → user_id when user logs in
     const resolveInvites = useCallback(async () => {
@@ -163,9 +171,67 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
         setCreating(false);
     };
 
+    const postPublicNote = async (e) => {
+        e.preventDefault();
+        if (!noteContent.trim() || posting) return;
+        setPosting(true);
+
+        let image_url = null;
+        if (noteImageFile) {
+            try {
+                const ext = noteImageFile.name.split('.').pop();
+                const path = `public/${user.id}/${Date.now()}.${ext}`;
+                const { error: upErr } = await supabase.storage
+                    .from('note-images')
+                    .upload(path, noteImageFile, { cacheControl: '3600', upsert: false });
+                if (upErr) throw upErr;
+                const { data: urlData } = supabase.storage.from('note-images').getPublicUrl(path);
+                image_url = urlData.publicUrl;
+            } catch (err) {
+                console.error('Image upload failed:', err.message);
+                alert(`Image upload failed: ${err.message}`);
+                setPosting(false);
+                return;
+            }
+        }
+
+        await supabase.from('notes').insert([{
+            user_id: user.id,
+            author_name: profile?.display_name || user.email.split('@')[0],
+            author_avatar: profile?.avatar_url || null,
+            title: noteTitle.trim() || null,
+            content: noteContent.trim(),
+            image_url,
+            is_public: true,
+        }]);
+
+        fetchPublicNotes();
+        setNoteTitle('');
+        setNoteContent('');
+        setNoteImageFile(null);
+        setNoteImagePreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setPosting(false);
+    };
+
     if (selectedFeed) {
-        return <FeedDetail feed={selectedFeed} user={user} onBack={() => { setSelectedFeed(null); fetchFeeds(); }} />;
+        return <FeedDetail feed={selectedFeed} user={user} onBack={() => { setSelectedFeed(null); fetchFeeds(); }} onlineUsers={onlineUsers} searchQuery={searchQuery} />;
     }
+
+    const filteredMyFeeds = myFeeds.filter(f =>
+        f.name?.toLowerCase().includes(searchQuery?.toLowerCase() || '') ||
+        f.description?.toLowerCase().includes(searchQuery?.toLowerCase() || '')
+    );
+
+    const filteredInvitedFeeds = invitedFeeds.filter(f =>
+        f.name?.toLowerCase().includes(searchQuery?.toLowerCase() || '') ||
+        f.description?.toLowerCase().includes(searchQuery?.toLowerCase() || '')
+    );
+
+    const filteredPublicNotes = publicNotes.filter(n =>
+        n.title?.toLowerCase().includes(searchQuery?.toLowerCase() || '') ||
+        n.content?.toLowerCase().includes(searchQuery?.toLowerCase() || '')
+    );
 
     const FeedCard = ({ feed, isOwner }) => (
         <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
@@ -269,7 +335,7 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
                             {/* My Feeds */}
                             <div>
                                 <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
-                                    <Lock size={11} /> My Channels ({myFeeds.length})
+                                    <Lock size={11} /> My Channels ({filteredMyFeeds.length})
                                 </p>
                                 {myFeeds.length === 0 ? (
                                     <div className="p-10 bg-white dark:bg-gray-900 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-[32px] text-center">
@@ -281,7 +347,7 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
                                     </div>
                                 ) : (
                                     <div className="grid gap-3">
-                                        {myFeeds.map(f => <FeedCard key={f.id} feed={f} isOwner={true} />)}
+                                        {filteredMyFeeds.map(f => <FeedCard key={f.id} feed={f} isOwner={true} />)}
                                     </div>
                                 )}
                             </div>
@@ -290,10 +356,10 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
                             {invitedFeeds.length > 0 && (
                                 <div className="mt-8">
                                     <p className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
-                                        <Users size={11} /> Invited Feeds ({invitedFeeds.length})
+                                        <Users size={11} /> Invited Feeds ({filteredInvitedFeeds.length})
                                     </p>
                                     <div className="grid gap-3">
-                                        {invitedFeeds.map(f => <FeedCard key={f.id} feed={f} isOwner={false} />)}
+                                        {filteredInvitedFeeds.map(f => <FeedCard key={f.id} feed={f} isOwner={false} />)}
                                     </div>
                                 </div>
                             )}
@@ -301,9 +367,56 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
                     ) : (
                         /* Community Tab Section */
                         <div className="space-y-6">
+                            <form onSubmit={postPublicNote} className="mb-8 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] p-6 space-y-4 shadow-xl shadow-gray-100 dark:shadow-none">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Plus size={13} className="text-primary" />
+                                    <span className="text-xs font-black uppercase tracking-widest text-gray-400">Post a Public Note</span>
+                                </div>
+                                <input type="text" placeholder="Title (optional)" value={noteTitle}
+                                    onChange={e => setNoteTitle(e.target.value)}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-xl px-4 py-3 text-sm outline-none transition-all text-gray-900 dark:text-white font-bold" />
+                                <textarea placeholder="Write your note..." value={noteContent}
+                                    onChange={e => setNoteContent(e.target.value)} rows={3}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-xl px-4 py-3 text-sm outline-none transition-all text-gray-900 dark:text-white font-bold resize-none" />
+
+                                {noteImagePreview && (
+                                    <div className="relative rounded-2xl overflow-hidden">
+                                        <img src={noteImagePreview} alt="preview" className="w-full max-h-64 object-cover rounded-2xl" />
+                                        <button
+                                            type="button"
+                                            onClick={() => { setNoteImageFile(null); setNoteImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                                            className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-all"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="flex items-center justify-between gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-100 dark:border-gray-800 text-gray-500 hover:text-primary hover:border-primary/30 transition-all text-xs font-black uppercase tracking-widest bg-gray-50/50 dark:bg-gray-800/50"
+                                    >
+                                        <Image size={16} /> Photo
+                                    </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file" accept="image/*" className="hidden"
+                                        onChange={e => {
+                                            const f = e.target.files?.[0];
+                                            if (f) { setNoteImageFile(f); setNoteImagePreview(URL.createObjectURL(f)); }
+                                        }}
+                                    />
+                                    <button type="submit" disabled={!noteContent.trim() || posting}
+                                        className="flex-1 max-w-[120px] flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl font-bold text-sm disabled:opacity-50 hover:bg-primary/90 transition-all active:scale-[0.98] shadow-lg shadow-primary/20">
+                                        {posting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Post
+                                    </button>
+                                </div>
+                            </form>
                             <div className="flex items-center justify-between mb-4">
                                 <p className="text-xs font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                                    <Globe size={11} /> Global Notes ({publicNotes.length})
+                                    <Globe size={11} /> Global Notes ({filteredPublicNotes.length})
                                 </p>
                             </div>
 
@@ -317,8 +430,8 @@ const NotesFeed = ({ user, onFeedsUpdate }) => {
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
-                                    {publicNotes.map(note => (
-                                        <CommunityNoteCard key={note.id} note={note} user={user} />
+                                    {filteredPublicNotes.map(note => (
+                                        <CommunityNoteCard key={note.id} note={note} user={user} currentUserProfile={profile} onlineUsers={onlineUsers} />
                                     ))}
                                 </div>
                             )}

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabaseClient';
-import Landing from './components/Landing';
-import Dashboard from './components/Dashboard';
+
+const Landing = lazy(() => import('./components/Landing'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
 
 function App() {
   const [session, setSession] = useState(null);
@@ -46,11 +47,22 @@ function App() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
-      {!session ? (
-        <Landing />
-      ) : (
-        <Dashboard user={session.user} />
-      )}
+      <Suspense fallback={
+        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-primary"></div>
+            <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+              <div className="h-4 w-4 bg-primary rounded-full"></div>
+            </div>
+          </div>
+        </div>
+      }>
+        {!session ? (
+          <Landing />
+        ) : (
+          <Dashboard user={session.user} />
+        )}
+      </Suspense>
     </div>
   );
 }

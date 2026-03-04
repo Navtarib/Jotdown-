@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { jsPDF } from 'jspdf';
 import {
     X,
     Moon,
@@ -17,9 +16,13 @@ import {
     Sparkles,
     Zap,
     Info,
-    Image
+    Image,
+    BookOpen,
+    ShieldCheck
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import HowToUse from './HowToUse';
+import TermsPolicy from './TermsPolicy';
 
 const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes, onNotesDeleted }) => {
     const [activeSubTab, setActiveSubTab] = useState('profile');
@@ -118,7 +121,8 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
         }
     };
 
-    const exportNotes = () => {
+    const exportNotes = async () => {
+        const { jsPDF } = await import('jspdf');
         const doc = new jsPDF();
         let yPos = 20;
 
@@ -195,6 +199,8 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
         { id: 'themes', label: 'Appearance', icon: <Palette size={18} /> },
         { id: 'pwa', label: 'App Install (PWA)', icon: <Monitor size={18} /> },
         { id: 'data', label: 'Data & Privacy', icon: <Zap size={18} /> },
+        { id: 'guide', label: 'User Guide', icon: <BookOpen size={18} /> },
+        { id: 'terms', label: 'Terms & Policy', icon: <ShieldCheck size={18} /> },
         { id: 'about', label: 'About App', icon: <Info size={18} /> },
     ];
 
@@ -456,12 +462,24 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
                                 </motion.div>
                             )}
 
+                            {activeSubTab === 'guide' && (
+                                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                                    <HowToUse />
+                                </motion.div>
+                            )}
+
+                            {activeSubTab === 'terms' && (
+                                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                                    <TermsPolicy />
+                                </motion.div>
+                            )}
+
                             {activeSubTab === 'about' && (
                                 <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                                     <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-6">About App</h3>
                                     <div className="flex flex-col items-center text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-[32px] border border-gray-100 dark:border-gray-700">
-                                        <div className="w-20 h-20 bg-yellow-400 rounded-3xl flex items-center justify-center shadow-2xl shadow-yellow-100 dark:shadow-none mb-6 italic text-white font-black text-4xl">
-                                            N
+                                        <div className="w-20 h-20 bg-white dark:bg-gray-700 rounded-3xl flex items-center justify-center shadow-2xl shadow-gray-100 dark:shadow-none mb-6 overflow-hidden border border-gray-200 dark:border-gray-600">
+                                            <img src="/pwa-512x512.png" alt="Jotdown" className="w-full h-full object-cover" />
                                         </div>
                                         <h4 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Jotdown Premium</h4>
                                         <p className="text-gray-400 font-bold mb-6 italic tracking-tight">Version 2.0.4 "Super Sonic"</p>

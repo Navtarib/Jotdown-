@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import ProfilePreview from './ProfilePreview';
 import NoteCard from './NoteCard';
 import { Heart, MessageCircle, Send, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const CommunityNoteCard = ({ note, user }) => {
+const CommunityNoteCard = ({ note, user, currentUserProfile, onlineUsers }) => {
     const [likes, setLikes] = useState([]);
     const [comments, setComments] = useState([]);
     const [hasLiked, setHasLiked] = useState(false);
@@ -13,6 +14,7 @@ const CommunityNoteCard = ({ note, user }) => {
     const [newComment, setNewComment] = useState('');
     const [likeLoading, setLikeLoading] = useState(false);
     const [commentLoading, setCommentLoading] = useState(false);
+    const [showProfilePreview, setShowProfilePreview] = useState(false);
     const commentInputRef = useRef(null);
 
     const fetchLikes = useCallback(async () => {
@@ -74,7 +76,7 @@ const CommunityNoteCard = ({ note, user }) => {
             await supabase.from('note_likes').insert([{
                 note_id: note.id,
                 user_id: user.id,
-                user_name: user.email.split('@')[0],
+                user_name: currentUserProfile?.display_name || user.email.split('@')[0],
             }]);
         }
         setLikeLoading(false);
@@ -87,7 +89,7 @@ const CommunityNoteCard = ({ note, user }) => {
         await supabase.from('note_comments').insert([{
             note_id: note.id,
             user_id: user.id,
-            author_name: user.email.split('@')[0],
+            author_name: currentUserProfile?.display_name || user.email.split('@')[0],
             content: newComment.trim(),
         }]);
         setNewComment('');
@@ -112,15 +114,20 @@ const CommunityNoteCard = ({ note, user }) => {
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] overflow-hidden shadow-sm">
             {/* Author Header */}
             <div className="flex items-center gap-3 px-5 pt-4 pb-2">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-orange-500 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary/20 border-2 border-white dark:border-gray-800 shrink-0 overflow-hidden">
+                <div
+                    onClick={() => setShowProfilePreview(true)}
+                    className="relative w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-orange-500 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary/20 border-2 border-white dark:border-gray-800 shrink-0 overflow-hidden cursor-pointer active:scale-95 transition-transform"
+                    aria-label="View Profile"
+                >
                     {note.author_avatar
-                        ? <img src={note.author_avatar} alt={note.author_name} className="w-full h-full object-cover" />
+                        ? <img src={note.author_avatar} alt={`${note.author_name}'s avatar`} className="w-full h-full object-cover" loading="lazy" />
                         : (note.author_name || 'A')[0].toUpperCase()
                     }
                 </div>
                 <div>
-                    <p className="text-sm font-black text-gray-900 dark:text-white leading-none">
+                    <p className="text-sm font-black text-gray-900 dark:text-white leading-none flex items-center gap-1.5">
                         {note.author_name || 'Anonymous'}
+                        <div className={`w-2 h-2 rounded-full shadow-sm ${onlineUsers?.includes(note.user_id) ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
                     </p>
                     <p className="text-[10px] text-gray-400 font-bold mt-0.5">
                         {formatTime(note.created_at)}
@@ -275,6 +282,17 @@ const CommunityNoteCard = ({ note, user }) => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <ProfilePreview
+                profile={{
+                    display_name: note.author_name,
+                    avatar_url: note.author_avatar,
+                    bio: note.author_bio // Note: bio might not be available in public notes feed yet.
+                }}
+                isOpen={showProfilePreview}
+                onClose={() => setShowProfilePreview(false)}
+                isOnline={onlineUsers?.includes(note.user_id)}
+            />
         </div>
     );
 };

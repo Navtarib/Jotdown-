@@ -4,6 +4,7 @@ import NoteInput from './NoteInput';
 import NoteGrid from './NoteGrid';
 import SettingsModal from './SettingsModal';
 import NotesFeed from './NotesFeed';
+import ProfilePreview from './ProfilePreview';
 import {
     LogOut,
     Search,
@@ -131,6 +132,8 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={() => setActiveTab('notes')}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'notes' ? 'text-primary' : 'text-gray-400'}`}
+                aria-label="Notes Tab"
+                aria-current={activeTab === 'notes' ? 'page' : undefined}
             >
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'notes' ? 'bg-primary/10' : ''}`}>
                     <FileText size={20} />
@@ -140,6 +143,8 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={() => setActiveTab('reminders')}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'reminders' ? 'text-primary' : 'text-gray-400'}`}
+                aria-label="Reminders Tab"
+                aria-current={activeTab === 'reminders' ? 'page' : undefined}
             >
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'reminders' ? 'bg-primary/10' : ''}`}>
                     <Bell size={20} />
@@ -151,6 +156,7 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={onSearchClick}
                 className="flex flex-col items-center gap-1 -mt-8 translate-y-[-4px]"
+                aria-label="Global Search"
             >
                 <div className="w-14 h-14 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/40 border-4 border-white dark:border-gray-900 text-white transition-transform hover:scale-110 active:scale-95">
                     <Search size={24} strokeWidth={2.5} />
@@ -160,6 +166,8 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={() => setActiveTab('feed')}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'feed' ? 'text-primary' : 'text-gray-400'}`}
+                aria-label="Community Feed Tab"
+                aria-current={activeTab === 'feed' ? 'page' : undefined}
             >
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'feed' ? 'bg-primary/10' : ''}`}>
                     <Rss size={20} />
@@ -169,6 +177,8 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={() => setActiveTab('archive')}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'archive' ? 'text-primary' : 'text-gray-400'}`}
+                aria-label="Archive Tab"
+                aria-current={activeTab === 'archive' ? 'page' : undefined}
             >
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'archive' ? 'bg-primary/10' : ''}`}>
                     <Archive size={20} />
@@ -178,6 +188,8 @@ const BottomNav = ({ activeTab, setActiveTab, onSearchClick }) => {
             <button
                 onClick={() => setActiveTab('trash')}
                 className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'trash' ? 'text-primary' : 'text-gray-400'}`}
+                aria-label="Trash Tab"
+                aria-current={activeTab === 'trash' ? 'page' : undefined}
             >
                 <div className={`p-2 rounded-xl transition-all ${activeTab === 'trash' ? 'bg-primary/10' : ''}`}>
                     <Trash2 size={20} />
@@ -195,20 +207,39 @@ const Dashboard = ({ user }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('notes');
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [showProfilePreview, setShowProfilePreview] = useState(false);
     const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
     const [feedCount, setFeedCount] = useState(0);
     const [profile, setProfile] = useState(null);
+    const [onlineUsers, setOnlineUsers] = useState([]);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
     const fetchProfile = useCallback(async () => {
+        // Load from cache first
+        const cache = localStorage.getItem('jotdown_profile');
+        if (cache) setProfile(JSON.parse(cache));
+
+        if (!navigator.onLine) return;
+
         const { data } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
             .maybeSingle();
-        if (data) setProfile(data);
+
+        if (data) {
+            setProfile(data);
+            localStorage.setItem('jotdown_profile', JSON.stringify(data));
+        }
     }, [user.id]);
 
     const fetchNotes = useCallback(async () => {
+        // Load from cache first
+        const cache = localStorage.getItem('jotdown_notes');
+        if (cache) setNotes(JSON.parse(cache));
+
+        if (!navigator.onLine) return;
+
         const { data, error } = await supabase
             .from('notes')
             .select('*')
@@ -216,12 +247,43 @@ const Dashboard = ({ user }) => {
             .order('created_at', { ascending: false });
 
         if (error) console.error('Error fetching notes:', error.message);
-        else setNotes(data);
+        else {
+            setNotes(data);
+            localStorage.setItem('jotdown_notes', JSON.stringify(data));
+        }
     }, [user.id]);
 
     useEffect(() => {
         fetchNotes();
         fetchProfile();
+
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        // Presence Tracking
+        const presenceChannel = supabase.channel('online-users', {
+            config: {
+                presence: {
+                    key: user.id,
+                },
+            },
+        });
+
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                const newState = presenceChannel.presenceState();
+                setOnlineUsers(Object.keys(newState));
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({
+                        user_id: user.id,
+                        online_at: new Date().toISOString(),
+                    });
+                }
+            });
 
         const channel = supabase
             .channel('notes_db_changes')
@@ -259,8 +321,11 @@ const Dashboard = ({ user }) => {
 
         return () => {
             supabase.removeChannel(channel);
+            presenceChannel.unsubscribe();
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
         };
-    }, [user.id, fetchNotes]);
+    }, [user.id, fetchNotes, fetchProfile]);
 
     const handleSignOut = async () => {
         await supabase.auth.signOut();
@@ -376,40 +441,70 @@ const Dashboard = ({ user }) => {
                         <button
                             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                             className="p-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors text-gray-400 hidden lg:block"
+                            aria-label={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
                         >
                             {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
                         </button>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 md:w-9 md:h-9 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                            <span className="text-white font-black text-lg md:text-xl italic">J</span>
+                        <div className="w-8 h-8 md:w-9 md:h-9 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 overflow-hidden border border-gray-100 dark:border-gray-700">
+                            <img src="/pwa-192x192.png" alt="Jotdown Logo" className="w-full h-full object-cover" loading="lazy" />
                         </div>
-                        <span className="text-lg md:text-xl font-black tracking-tight text-gray-900 dark:text-white block">Jotdown!</span>
+                        <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tighter">
+                            Jot<span className="text-primary">down</span>
+                        </h1>
                     </div>
 
                     <div className="flex items-center gap-2 md:gap-3 justify-end">
                         <button
+                            onClick={() => setIsSearchOverlayOpen(true)}
+                            className="p-2 md:p-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-all text-gray-400 hover:text-primary shadow-sm md:shadow-none"
+                            aria-label="Search Notes"
+                        >
+                            <Search size={20} />
+                        </button>
+                        <button
                             onClick={() => setIsSettingsOpen(true)}
                             className="p-2 md:p-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors text-gray-400 hover:text-primary"
+                            aria-label="Settings"
                         >
                             <Settings size={20} />
                         </button>
                         <button
                             onClick={handleSignOut}
                             className="p-2 md:p-2.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors text-gray-400 hover:text-red-500 hidden sm:block"
+                            aria-label="Sign Out"
                         >
                             <LogOut size={20} />
                         </button>
-                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl overflow-hidden flex items-center justify-center text-white font-black shadow-lg shadow-primary/20 border-2 border-white dark:border-gray-800 ring-2 ring-gray-50 dark:ring-gray-900 text-xs md:text-base">
-                            {profile?.avatar_url
-                                ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                                : <div className="w-full h-full bg-gradient-to-tr from-primary to-orange-500 flex items-center justify-center">{user.email?.[0].toUpperCase() || 'U'}</div>
-                            }
+                        <div className="relative cursor-pointer" onClick={() => setShowProfilePreview(true)}>
+                            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl overflow-hidden flex items-center justify-center text-white font-black shadow-lg shadow-primary/20 border-2 border-white dark:border-gray-800 ring-2 ring-gray-50 dark:ring-gray-900 text-xs md:text-base">
+                                {profile?.avatar_url
+                                    ? <img src={profile.avatar_url} alt="User Avatar" className="w-full h-full object-cover" loading="lazy" />
+                                    : <div className="w-full h-full bg-gradient-to-tr from-primary to-orange-500 flex items-center justify-center">{(profile?.display_name?.[0] || user.email?.[0] || 'U').toUpperCase()}</div>
+                                }
+                            </div>
+                            {/* Online Indicator */}
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 shadow-sm ${onlineUsers.includes(user.id) ? 'bg-green-500' : 'bg-gray-400'}`} />
                         </div>
                     </div>
                 </div>
             </header>
+
+            {/* Offline Banner */}
+            <AnimatePresence>
+                {isOffline && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="bg-red-500 text-white text-[10px] font-black uppercase tracking-widest py-1.5 text-center fixed top-0 left-0 right-0 z-[110]"
+                    >
+                        Working Offline — Changes will sync when reconnected
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Search Overlay */}
             <AnimatePresence>
@@ -492,7 +587,7 @@ const Dashboard = ({ user }) => {
                             {activeTab === 'notes' ? `${getGreeting()}, ` :
                                 activeTab === 'feed' ? `Feed, ` :
                                     `${activeTab}, `}
-                            <span className="bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">{(user.email || 'Explorer').split('@')[0]}</span>.
+                            <span className="bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">{profile?.display_name || user.email?.split('@')[0] || 'Explorer'}</span>.
                         </h2>
                         <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 font-medium">
                             {activeTab === 'notes'
@@ -504,7 +599,7 @@ const Dashboard = ({ user }) => {
                     </motion.div>
 
                     {activeTab === 'feed' ? (
-                        <NotesFeed user={user} onFeedsUpdate={handleFeedsUpdate} />
+                        <NotesFeed user={user} profile={profile} onFeedsUpdate={handleFeedsUpdate} onlineUsers={onlineUsers} searchQuery={searchQuery} />
                     ) : (
                         <>
                             <div className="mb-12 md:mb-16">
@@ -538,6 +633,13 @@ const Dashboard = ({ user }) => {
                 onProfileUpdate={setProfile}
                 notes={notes}
                 onNotesDeleted={fetchNotes}
+            />
+
+            <ProfilePreview
+                profile={profile}
+                isOpen={showProfilePreview}
+                onClose={() => setShowProfilePreview(false)}
+                isOnline={onlineUsers.includes(user.id)}
             />
         </div>
     );

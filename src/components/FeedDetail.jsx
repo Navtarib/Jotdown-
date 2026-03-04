@@ -4,7 +4,7 @@ import FeedNoteCard from './FeedNoteCard';
 import { ArrowLeft, Plus, Users, Send, UserPlus, Trash2, Loader2, Image, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const FeedDetail = ({ feed, user, onBack }) => {
+const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
     const [notes, setNotes] = useState([]);
     const [members, setMembers] = useState([]);
     const [noteTitle, setNoteTitle] = useState('');
@@ -35,7 +35,7 @@ const FeedDetail = ({ feed, user, onBack }) => {
     const fetchMembers = useCallback(async () => {
         const { data } = await supabase
             .from('feed_members')
-            .select('*')
+            .select('*, profiles(display_name, avatar_url)')
             .eq('feed_id', feed.id);
         if (data) setMembers(data);
     }, [feed.id]);
@@ -174,6 +174,11 @@ const FeedDetail = ({ feed, user, onBack }) => {
         }
     };
 
+    const filteredNotes = notes.filter(n =>
+        n.title?.toLowerCase().includes(searchQuery?.toLowerCase() || '') ||
+        n.content?.toLowerCase().includes(searchQuery?.toLowerCase() || '')
+    );
+
     return (
         <div className="w-full max-w-2xl mx-auto px-4 md:px-0 pb-32">
             {/* Header */}
@@ -213,9 +218,12 @@ const FeedDetail = ({ feed, user, onBack }) => {
                 <div className="flex items-center gap-2 mb-3 px-1">
                     <div className="flex -space-x-1.5">
                         {members.slice(0, 5).map(m => (
-                            <div key={m.id} title={m.invited_email}
-                                className="w-6 h-6 rounded-full bg-primary/10 border-2 border-white dark:border-gray-950 flex items-center justify-center text-[9px] font-black text-primary">
-                                {m.invited_email?.[0]?.toUpperCase()}
+                            <div key={m.id} title={m.profiles?.display_name || m.invited_email}
+                                className="w-6 h-6 rounded-full bg-primary/10 border-2 border-white dark:border-gray-950 flex items-center justify-center text-[9px] font-black text-primary overflow-hidden">
+                                {m.profiles?.avatar_url
+                                    ? <img src={m.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                                    : (m.profiles?.display_name?.[0] || m.invited_email?.[0] || 'U').toUpperCase()
+                                }
                             </div>
                         ))}
                     </div>
@@ -239,11 +247,16 @@ const FeedDetail = ({ feed, user, onBack }) => {
                                 {members.map(m => (
                                     <div key={m.id} className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
-                                                {m.invited_email?.[0]?.toUpperCase()}
+                                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black text-xs overflow-hidden">
+                                                {m.profiles?.avatar_url
+                                                    ? <img src={m.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                                                    : (m.profiles?.display_name?.[0] || m.invited_email?.[0] || 'U').toUpperCase()
+                                                }
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">{m.invited_email.split('@')[0]}</p>
+                                                <p className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-none">
+                                                    {m.profiles?.display_name || m.invited_email.split('@')[0]}
+                                                </p>
                                                 <p className="text-xs text-gray-400">{m.invited_email}</p>
                                             </div>
                                         </div>
@@ -326,15 +339,15 @@ const FeedDetail = ({ feed, user, onBack }) => {
             )}
 
             {/* Notes list */}
-            {notes.length === 0 ? (
+            {filteredNotes.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
                     <Plus className="text-gray-200 dark:text-gray-700" size={40} />
-                    <p className="text-sm text-gray-400 font-bold">No notes in this feed yet</p>
+                    <p className="text-sm text-gray-400 font-bold">No notes found matching your search</p>
                 </div>
             ) : (
                 <div className="space-y-4">
                     <AnimatePresence>
-                        {notes.map(note => <FeedNoteCard key={note.id} note={note} user={user} isFeedOwner={isOwner} />)}
+                        {filteredNotes.map(note => <FeedNoteCard key={note.id} note={note} user={user} isFeedOwner={isOwner} onlineUsers={onlineUsers} />)}
                     </AnimatePresence>
                 </div>
             )}

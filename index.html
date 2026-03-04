@@ -3,12 +3,55 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/png" href="/pwa-192x192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#facc15" />
 
-  <title>Jotdown</title>
+  <!-- SEO Meta Tags -->
+  <title>Jotdown - Premium AI Note-Taking App | jotdownnotes</title>
+  <meta name="description"
+    content="Jotdown (jotdownnotes) is a premium AI-powered note-taking app with offline support, real-time community feeds, and private channels. Capture ideas fast." />
+  <meta name="keywords"
+    content="jotdownnotes, jotdown, note-taking app, private feeds, community notes, offline notes, premium notes" />
+  <meta name="author" content="Jotdown Team" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Jotdown - Premium AI Note-Taking App | jotdownnotes" />
+  <meta property="og:description"
+    content="Capture your thoughts instantly with Jotdown. Features offline caching, PWA support, and real-time collaboration. #jotdownnotes" />
+  <meta property="og:image" content="/pwa-512x512.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:title" content="Jotdown - Premium AI Note-Taking App | jotdownnotes" />
+  <meta property="twitter:description"
+    content="Capture your thoughts instantly with Jotdown. Features offline caching and real-time community feeds. #jotdownnotes" />
+  <meta property="twitter:image" content="/pwa-512x512.png" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Jotdown",
+      "alternateName": "jotdownnotes",
+      "operatingSystem": "Web, Android, iOS",
+      "applicationCategory": "ProductivityApplication",
+      "description": "Premium AI-powered note-taking app with offline support and community features.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  </script>
 </head>
 
 <body>

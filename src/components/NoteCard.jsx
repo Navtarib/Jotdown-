@@ -123,8 +123,9 @@ const NoteCard = ({ note, onOptimisticDelete, onNoteUpdated, isOwner = true }) =
                         <div className="mb-3 rounded-2xl overflow-hidden">
                             <img
                                 src={note.image_url}
-                                alt="note"
+                                alt="Note attachment"
                                 className="w-full max-h-56 object-cover"
+                                loading="lazy"
                                 onClick={e => { e.stopPropagation(); window.open(note.image_url, '_blank'); }}
                             />
                         </div>

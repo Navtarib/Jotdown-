@@ -1,14 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import ProfilePreview from './ProfilePreview';
 import { CheckCircle2, Clock, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const FeedNoteCard = ({ note, user, isFeedOwner }) => {
+const FeedNoteCard = ({ note, user, isFeedOwner, onlineUsers }) => {
     const [acknowledgments, setAcknowledgments] = useState([]);
     const [hasAcknowledged, setHasAcknowledged] = useState(false);
     const [showAcks, setShowAcks] = useState(false);
     const [loading, setLoading] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [authorProfile, setAuthorProfile] = useState(null);
+    const [showProfilePreview, setShowProfilePreview] = useState(false);
+
+    const fetchAuthorProfile = useCallback(async () => {
+        const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', note.owner_id)
+            .maybeSingle();
+        if (data) setAuthorProfile(data);
+    }, [note.owner_id]);
 
     const fetchAcknowledgments = useCallback(async () => {
         const { data } = await supabase
@@ -24,6 +36,7 @@ const FeedNoteCard = ({ note, user, isFeedOwner }) => {
 
     useEffect(() => {
         fetchAcknowledgments();
+        fetchAuthorProfile();
         const channel = supabase
             .channel(`feedack-${note.id}`)
             .on('postgres_changes', {
@@ -47,10 +60,17 @@ const FeedNoteCard = ({ note, user, isFeedOwner }) => {
             await supabase.from('feed_acknowledgments')
                 .delete().eq('feed_note_id', note.id).eq('user_id', user.id);
         } else {
+            // Get profile for the name if possible, otherwise fallback to email
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('display_name')
+                .eq('id', user.id)
+                .maybeSingle();
+
             await supabase.from('feed_acknowledgments').insert([{
                 feed_note_id: note.id,
                 user_id: user.id,
-                user_name: user.email.split('@')[0],
+                user_name: profile?.display_name || user.email.split('@')[0],
                 user_email: user.email,
             }]);
         }
@@ -86,12 +106,19 @@ const FeedNoteCard = ({ note, user, isFeedOwner }) => {
         >
             <div className="flex items-center justify-between p-4 pb-2">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-orange-400 flex items-center justify-center text-white font-black text-sm shadow">
-                        {note.author_email?.[0]?.toUpperCase() || 'U'}
+                    <div
+                        onClick={() => setShowProfilePreview(true)}
+                        className="relative w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-orange-400 flex items-center justify-center text-white font-black text-sm shadow overflow-hidden cursor-pointer active:scale-95 transition-transform"
+                    >
+                        {authorProfile?.avatar_url
+                            ? <img src={authorProfile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                            : (authorProfile?.display_name?.[0] || note.author_email?.[0] || 'U').toUpperCase()
+                        }
                     </div>
                     <div>
-                        <p className="font-bold text-gray-900 dark:text-white text-sm leading-none">
-                            {note.author_email?.split('@')[0] || 'Feed Member'}
+                        <p className="font-bold text-gray-900 dark:text-white text-sm leading-none flex items-center gap-1.5">
+                            {authorProfile?.display_name || note.author_email?.split('@')[0] || 'Feed Member'}
+                            <div className={`w-2 h-2 rounded-full shadow-sm ${onlineUsers?.includes(note.owner_id) ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
                         </p>
                         <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                             <Clock size={10} /> {formatDate(note.created_at)}
@@ -177,6 +204,15 @@ const FeedNoteCard = ({ note, user, isFeedOwner }) => {
                     {hasAcknowledged ? 'Acknowledged ✓' : 'Acknowledge'}
                 </button>
             </div>
+            <ProfilePreview
+                profile={authorProfile || {
+                    display_name: note.author_email?.split('@')[0],
+                    avatar_url: null
+                }}
+                isOpen={showProfilePreview}
+                onClose={() => setShowProfilePreview(false)}
+                isOnline={onlineUsers?.includes(note.owner_id)}
+            />
         </motion.div>
     );
 };
