@@ -1,7 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/(?!_.*|.*\\..*|__.*)(.*)",
+            "source": "/((?!_.*|.*\\..*|__.*).*)",
             "destination": "/index.html"
         }
     ]
