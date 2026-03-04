@@ -27,8 +27,8 @@ A lightning-fast, secure, and intuitive note-taking application built with React
    ```
 3. Create a `.env` file in the root directory and add your Supabase credentials (see `.env.example`):
    ```
-   VITE_SUPABASE_URL=your-project-url
-   VITE_SUPABASE_ANON_KEY=your-anon-key
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
    ```
 4. Start the development server:
    ```bash

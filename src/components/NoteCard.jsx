@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Trash2, Edit3, X, Check, Clock, Sparkles, Bell, Archive, ArchiveRestore, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const NoteCard = ({ note, onOptimisticDelete, onNoteUpdated, isOwner = true }) => {
+const NoteCard = memo(({ note, onOptimisticDelete, onNoteUpdated, isOwner = true }) => {
     const toLocalDatetime = (isoString) => {
         if (!isoString) return '';
         const date = new Date(isoString);
@@ -268,6 +268,6 @@ const NoteCard = ({ note, onOptimisticDelete, onNoteUpdated, isOwner = true }) =
             </AnimatePresence >
         </>
     );
-};
+});
 
 export default NoteCard;

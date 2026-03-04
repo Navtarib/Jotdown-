@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import NoteInput from './NoteInput';
 import NoteGrid from './NoteGrid';
-import SettingsModal from './SettingsModal';
-import NotesFeed from './NotesFeed';
-import ProfilePreview from './ProfilePreview';
+
+const SettingsModal = lazy(() => import('./SettingsModal'));
+const NotesFeed = lazy(() => import('./NotesFeed'));
+const ProfilePreview = lazy(() => import('./ProfilePreview'));
 import {
     LogOut,
     Search,
@@ -17,7 +18,8 @@ import {
     X,
     Sparkles,
     Zap,
-    Rss
+    Rss,
+    Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -354,60 +356,64 @@ const Dashboard = ({ user }) => {
         setFeedCount(count);
     };
 
-    const filteredNotes = notes.filter((note) => {
-        const title = note.title || "";
-        const content = note.content || "";
-        const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            content.toLowerCase().includes(searchQuery.toLowerCase());
+    const filteredNotes = useMemo(() => {
+        return notes.filter((note) => {
+            const title = note.title || "";
+            const content = note.content || "";
+            const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                content.toLowerCase().includes(searchQuery.toLowerCase());
 
-        if (!matchesSearch) return false;
+            if (!matchesSearch) return false;
 
-        if (activeTab === 'reminders') {
-            return note.reminder_at !== null && !note.is_archived && !note.is_trashed;
-        }
+            if (activeTab === 'reminders') {
+                return note.reminder_at !== null && !note.is_archived && !note.is_trashed;
+            }
 
-        if (activeTab === 'archive') {
-            return note.is_archived === true && !note.is_trashed;
-        }
+            if (activeTab === 'archive') {
+                return note.is_archived === true && !note.is_trashed;
+            }
 
-        if (activeTab === 'trash') {
-            return note.is_trashed === true;
-        }
+            if (activeTab === 'trash') {
+                return note.is_trashed === true;
+            }
 
-        if (activeTab === 'notes') {
-            return note.is_archived !== true && !note.is_trashed;
-        }
+            if (activeTab === 'notes') {
+                return note.is_archived !== true && !note.is_trashed;
+            }
 
-        if (activeTab === 'feed') return false;
+            if (activeTab === 'feed') return false;
 
-        return true;
-    });
+            return true;
+        });
+    }, [notes, searchQuery, activeTab]);
 
     // Reminder Notification Check
+    const notesWithReminders = useMemo(() => notes.filter(n => n.reminder_at), [notes]);
+
     useEffect(() => {
+        if (notesWithReminders.length === 0) return;
+
         const checkReminders = () => {
             const now = new Date();
-            notes.forEach(note => {
-                if (note.reminder_at) {
-                    const reminderTime = new Date(note.reminder_at);
-                    const isDue = reminderTime <= now;
-                    const isRecent = reminderTime > new Date(now.getTime() - 5 * 60000);
-                    const notificationKey = `${note.id}-${note.reminder_at}`;
-                    const alreadyNotified = window.notifiedNotes?.includes(notificationKey);
+            notesWithReminders.forEach(note => {
+                const reminderTime = new Date(note.reminder_at);
+                const isDue = reminderTime <= now;
+                const isRecent = reminderTime > new Date(now.getTime() - 5 * 60000);
+                const notificationKey = `${note.id}-${note.reminder_at}`;
+                const alreadyNotified = window.notifiedNotes?.includes(notificationKey);
 
-                    if (isDue && isRecent && !alreadyNotified) {
-                        window.notifiedNotes = [...(window.notifiedNotes || []), notificationKey];
-                        setTimeout(() => {
-                            alert(`⏰ REMINDER: ${note.title || 'Untitled Note'}\n\n${note.content.substring(0, 100)}...`);
-                        }, 100);
-                    }
+                if (isDue && isRecent && !alreadyNotified) {
+                    window.notifiedNotes = [...(window.notifiedNotes || []), notificationKey];
+                    setTimeout(() => {
+                        alert(`⏰ REMINDER: ${note.title || 'Untitled Note'}\n\n${note.content.substring(0, 100)}...`);
+                    }, 100);
                 }
             });
         };
 
         const interval = setInterval(checkReminders, 10 * 1000);
         return () => clearInterval(interval);
-    }, [notes]);
+    }, [notesWithReminders]);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -599,7 +605,9 @@ const Dashboard = ({ user }) => {
                     </motion.div>
 
                     {activeTab === 'feed' ? (
-                        <NotesFeed user={user} profile={profile} onFeedsUpdate={handleFeedsUpdate} onlineUsers={onlineUsers} searchQuery={searchQuery} />
+                        <Suspense fallback={<div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-primary" size={32} /></div>}>
+                            <NotesFeed user={user} profile={profile} onFeedsUpdate={handleFeedsUpdate} onlineUsers={onlineUsers} searchQuery={searchQuery} />
+                        </Suspense>
                     ) : (
                         <>
                             <div className="mb-12 md:mb-16">
@@ -625,22 +633,26 @@ const Dashboard = ({ user }) => {
                 onSearchClick={() => setIsSearchOverlayOpen(true)}
             />
 
-            <SettingsModal
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                user={user}
-                profile={profile}
-                onProfileUpdate={setProfile}
-                notes={notes}
-                onNotesDeleted={fetchNotes}
-            />
+            <Suspense fallback={null}>
+                <SettingsModal
+                    isOpen={isSettingsOpen}
+                    onClose={() => setIsSettingsOpen(false)}
+                    user={user}
+                    profile={profile}
+                    onProfileUpdate={setProfile}
+                    notes={notes}
+                    onNotesDeleted={fetchNotes}
+                />
+            </Suspense>
 
-            <ProfilePreview
-                profile={profile}
-                isOpen={showProfilePreview}
-                onClose={() => setShowProfilePreview(false)}
-                isOnline={onlineUsers.includes(user.id)}
-            />
+            <Suspense fallback={null}>
+                <ProfilePreview
+                    profile={profile}
+                    isOpen={showProfilePreview}
+                    onClose={() => setShowProfilePreview(false)}
+                    isOnline={onlineUsers.includes(user.id)}
+                />
+            </Suspense>
         </div>
     );
 };

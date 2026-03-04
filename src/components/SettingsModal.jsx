@@ -18,7 +18,8 @@ import {
     Info,
     Image,
     BookOpen,
-    ShieldCheck
+    ShieldCheck,
+    ChevronLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import HowToUse from './HowToUse';
@@ -26,6 +27,7 @@ import TermsPolicy from './TermsPolicy';
 
 const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes, onNotesDeleted }) => {
     const [activeSubTab, setActiveSubTab] = useState('profile');
+    const [showMobileDetail, setShowMobileDetail] = useState(false);
     const [installPrompt, setInstallPrompt] = useState(null);
     const [isDarkMode, setIsDarkMode] = useState(document.documentElement.classList.contains('dark'));
     const [accentColor, setAccentColor] = useState(localStorage.getItem('accentColor') || '#facc15');
@@ -53,6 +55,11 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
             setInstallPrompt(e);
         });
     }, []);
+
+    // Reset mobile view when opening
+    useEffect(() => {
+        if (isOpen) setShowMobileDetail(false);
+    }, [isOpen]);
 
     const saveProfile = async () => {
         setProfileSaving(true);
@@ -224,7 +231,7 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
                     className="relative bg-white dark:bg-gray-900 w-full max-w-4xl h-[600px] rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row shadow-yellow-100/20"
                 >
                     {/* Sidebar */}
-                    <div className="w-full md:w-72 bg-gray-50 dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 p-6 flex flex-col pt-12">
+                    <div className="w-full md:w-72 bg-gray-50 dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 p-6 flex flex-col pt-8 md:pt-12">
                         <div className="flex items-center gap-3 mb-8 px-2">
                             <div className="w-10 h-10 bg-yellow-400 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-100">
                                 <Settings className="text-white" size={20} />
@@ -236,7 +243,10 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
                             {menuItems.map(item => (
                                 <button
                                     key={item.id}
-                                    onClick={() => setActiveSubTab(item.id)}
+                                    onClick={() => {
+                                        setActiveSubTab(item.id);
+                                        setShowMobileDetail(true);
+                                    }}
                                     className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all group ${activeSubTab === item.id
                                         ? 'bg-white dark:bg-gray-700 text-yellow-600 dark:text-yellow-400 shadow-sm border border-gray-100 dark:border-gray-600 font-bold'
                                         : 'text-gray-500 dark:text-gray-400 hover:bg-white/50 dark:hover:bg-gray-700/50'
@@ -263,7 +273,14 @@ const SettingsModal = ({ isOpen, onClose, user, profile, onProfileUpdate, notes,
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 p-8 md:p-12 overflow-y-auto bg-white dark:bg-gray-900">
+                    <div className={`flex-1 p-6 md:p-12 overflow-y-auto bg-white dark:bg-gray-900 transition-all duration-300 ${showMobileDetail ? 'absolute inset-0 z-50' : 'hidden md:block'} md:relative md:z-auto`}>
+                        <button
+                            onClick={() => setShowMobileDetail(false)}
+                            className="md:hidden flex items-center gap-2 text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
+                        >
+                            <ChevronLeft size={20} />
+                            <span className="text-sm font-bold">Back to Settings</span>
+                        </button>
                         <button
                             onClick={onClose}
                             className="absolute right-6 top-6 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl text-gray-400 transition-colors"

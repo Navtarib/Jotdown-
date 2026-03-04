@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import ProfilePreview from './ProfilePreview';
 import NoteCard from './NoteCard';
 import { Heart, MessageCircle, Send, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const CommunityNoteCard = ({ note, user, currentUserProfile, onlineUsers }) => {
+const CommunityNoteCard = memo(({ note, user, currentUserProfile, onlineUsers }) => {
     const [likes, setLikes] = useState([]);
     const [comments, setComments] = useState([]);
     const [hasLiked, setHasLiked] = useState(false);
@@ -295,6 +295,6 @@ const CommunityNoteCard = ({ note, user, currentUserProfile, onlineUsers }) => {
             />
         </div>
     );
-};
+});
 
 export default CommunityNoteCard;
