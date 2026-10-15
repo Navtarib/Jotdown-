@@ -9,8 +9,8 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
     const [members, setMembers] = useState([]);
     const [noteTitle, setNoteTitle] = useState('');
     const [noteContent, setNoteContent] = useState('');
-    const [noteImageFile, setNoteImageFile] = useState(null);
-    const [noteImagePreview, setNoteImagePreview] = useState(null);
+    const [noteImageFiles, setNoteImageFiles] = useState([]);
+    const [noteImagePreviews, setNoteImagePreviews] = useState([]);
     const [inviteEmail, setInviteEmail] = useState('');
     const [showInvite, setShowInvite] = useState(false);
     const [showMembers, setShowMembers] = useState(false);
@@ -19,6 +19,20 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
     const feedFileInputRef = useRef(null);
 
     const isOwner = feed.owner_id === user?.id;
+
+    const handleImageSelect = (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        setNoteImageFiles(prev => [...prev, ...files]);
+        const newPreviews = files.map(file => URL.createObjectURL(file));
+        setNoteImagePreviews(prev => [...prev, ...newPreviews]);
+    };
+
+    const removeImage = (index) => {
+        setNoteImageFiles(prev => prev.filter((_, i) => i !== index));
+        setNoteImagePreviews(prev => prev.filter((_, i) => i !== index));
+        if (feedFileInputRef.current) feedFileInputRef.current.value = '';
+    };
 
     const fetchNotes = useCallback(async () => {
         const { data } = await supabase
@@ -95,20 +109,23 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
 
     const postNote = async (e) => {
         e.preventDefault();
-        if (!noteContent.trim() || posting) return;
+        if ((!noteContent.trim() && noteImageFiles.length === 0) || posting) return;
         setPosting(true);
 
-        let image_url = null;
-        if (noteImageFile) {
+        let imageUrls = [];
+        if (noteImageFiles.length > 0) {
             try {
-                const ext = noteImageFile.name.split('.').pop();
-                const path = `feeds/${feed.id}/${Date.now()}.${ext}`;
-                const { error: upErr } = await supabase.storage
-                    .from('note-images')
-                    .upload(path, noteImageFile, { cacheControl: '3600', upsert: false });
-                if (upErr) throw upErr;
-                const { data: urlData } = supabase.storage.from('note-images').getPublicUrl(path);
-                image_url = urlData.publicUrl;
+                const uploadPromises = noteImageFiles.map(async (file) => {
+                    const ext = file.name.split('.').pop();
+                    const path = `feeds/${feed.id}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+                    const { error: upErr } = await supabase.storage
+                        .from('note-images')
+                        .upload(path, file, { cacheControl: '3600', upsert: false });
+                    if (upErr) throw upErr;
+                    const { data: urlData } = supabase.storage.from('note-images').getPublicUrl(path);
+                    return urlData.publicUrl;
+                });
+                imageUrls = await Promise.all(uploadPromises);
             } catch (err) {
                 console.error('Image upload failed:', err.message);
                 alert(`Image upload failed: ${err.message}`);
@@ -123,13 +140,14 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
             author_email: user.email,
             title: noteTitle.trim() || null,
             content: noteContent.trim(),
-            image_url,
+            image_urls: imageUrls,
+            image_url: imageUrls[0] || null,
         }]);
         fetchNotes();
         setNoteTitle('');
         setNoteContent('');
-        setNoteImageFile(null);
-        setNoteImagePreview(null);
+        setNoteImageFiles([]);
+        setNoteImagePreviews([]);
         if (feedFileInputRef.current) feedFileInputRef.current.value = '';
         setPosting(false);
     };
@@ -300,17 +318,21 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
                         onChange={e => setNoteContent(e.target.value)} rows={3}
                         className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
 
-                    {/* Image Preview for Feed Post */}
-                    {noteImagePreview && (
-                        <div className="relative rounded-xl overflow-hidden">
-                            <img src={noteImagePreview} alt="preview" className="w-full max-h-48 object-cover rounded-xl" />
-                            <button
-                                type="button"
-                                onClick={() => { setNoteImageFile(null); setNoteImagePreview(null); if (feedFileInputRef.current) feedFileInputRef.current.value = ''; }}
-                                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                            >
-                                <X size={13} />
-                            </button>
+                    {/* Image Previews for Feed Post */}
+                    {noteImagePreviews.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {noteImagePreviews.map((preview, idx) => (
+                                <div key={idx} className="relative rounded-xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-800">
+                                    <img src={preview} alt={`preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeImage(idx)}
+                                        className="absolute top-1.5 right-1.5 p-1 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -320,17 +342,17 @@ const FeedDetail = ({ feed, user, onBack, onlineUsers, searchQuery }) => {
                             onClick={() => feedFileInputRef.current?.click()}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-700 text-gray-400 hover:text-primary hover:border-primary/30 transition-all text-xs font-bold"
                         >
-                            <Image size={14} /> Photo
+                            <Image size={14} /> Photos {noteImageFiles.length > 0 && `(${noteImageFiles.length})`}
                         </button>
                         <input
                             ref={feedFileInputRef}
-                            type="file" accept="image/*" className="hidden"
-                            onChange={e => {
-                                const f = e.target.files?.[0];
-                                if (f) { setNoteImageFile(f); setNoteImagePreview(URL.createObjectURL(f)); }
-                            }}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={handleImageSelect}
                         />
-                        <button type="submit" disabled={!noteContent.trim() || posting}
+                        <button type="submit" disabled={(!noteContent.trim() && noteImageFiles.length === 0) || posting}
                             className="flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:opacity-50 hover:bg-primary/90 transition-colors">
                             {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Post
                         </button>

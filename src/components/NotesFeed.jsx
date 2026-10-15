@@ -21,10 +21,24 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
     // Community post states
     const [noteTitle, setNoteTitle] = useState('');
     const [noteContent, setNoteContent] = useState('');
-    const [noteImageFile, setNoteImageFile] = useState(null);
-    const [noteImagePreview, setNoteImagePreview] = useState(null);
+    const [noteImageFiles, setNoteImageFiles] = useState([]);
+    const [noteImagePreviews, setNoteImagePreviews] = useState([]);
     const [posting, setPosting] = useState(false);
     const fileInputRef = useRef(null);
+
+    const handleImageSelect = (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        setNoteImageFiles(prev => [...prev, ...files]);
+        const newPreviews = files.map(file => URL.createObjectURL(file));
+        setNoteImagePreviews(prev => [...prev, ...newPreviews]);
+    };
+
+    const removeImage = (index) => {
+        setNoteImageFiles(prev => prev.filter((_, i) => i !== index));
+        setNoteImagePreviews(prev => prev.filter((_, i) => i !== index));
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
 
     // Automatically link invited_email → user_id when user logs in
     const resolveInvites = useCallback(async () => {
@@ -33,7 +47,7 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
             return;
         }
         console.log('Attempting to resolve invites for:', user.email);
-        const { data, error, count } = await supabase
+        const { data, error } = await supabase
             .from('feed_members')
             .update({ user_id: user.id })
             .eq('invited_email', user.email.toLowerCase().trim())
@@ -173,20 +187,23 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
 
     const postPublicNote = async (e) => {
         e.preventDefault();
-        if (!noteContent.trim() || posting) return;
+        if ((!noteContent.trim() && noteImageFiles.length === 0) || posting) return;
         setPosting(true);
 
-        let image_url = null;
-        if (noteImageFile) {
+        let imageUrls = [];
+        if (noteImageFiles.length > 0) {
             try {
-                const ext = noteImageFile.name.split('.').pop();
-                const path = `public/${user.id}/${Date.now()}.${ext}`;
-                const { error: upErr } = await supabase.storage
-                    .from('note-images')
-                    .upload(path, noteImageFile, { cacheControl: '3600', upsert: false });
-                if (upErr) throw upErr;
-                const { data: urlData } = supabase.storage.from('note-images').getPublicUrl(path);
-                image_url = urlData.publicUrl;
+                const uploadPromises = noteImageFiles.map(async (file) => {
+                    const ext = file.name.split('.').pop();
+                    const path = `public/${user.id}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+                    const { error: upErr } = await supabase.storage
+                        .from('note-images')
+                        .upload(path, file, { cacheControl: '3600', upsert: false });
+                    if (upErr) throw upErr;
+                    const { data: urlData } = supabase.storage.from('note-images').getPublicUrl(path);
+                    return urlData.publicUrl;
+                });
+                imageUrls = await Promise.all(uploadPromises);
             } catch (err) {
                 console.error('Image upload failed:', err.message);
                 alert(`Image upload failed: ${err.message}`);
@@ -201,15 +218,16 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
             author_avatar: profile?.avatar_url || null,
             title: noteTitle.trim() || null,
             content: noteContent.trim(),
-            image_url,
+            image_urls: imageUrls,
+            image_url: imageUrls[0] || null,
             is_public: true,
         }]);
 
         fetchPublicNotes();
         setNoteTitle('');
         setNoteContent('');
-        setNoteImageFile(null);
-        setNoteImagePreview(null);
+        setNoteImageFiles([]);
+        setNoteImagePreviews([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
         setPosting(false);
     };
@@ -379,16 +397,20 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
                                     onChange={e => setNoteContent(e.target.value)} rows={3}
                                     className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-primary/20 rounded-xl px-4 py-3 text-sm outline-none transition-all text-gray-900 dark:text-white font-bold resize-none" />
 
-                                {noteImagePreview && (
-                                    <div className="relative rounded-2xl overflow-hidden">
-                                        <img src={noteImagePreview} alt="preview" className="w-full max-h-64 object-cover rounded-2xl" />
-                                        <button
-                                            type="button"
-                                            onClick={() => { setNoteImageFile(null); setNoteImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                                            className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-all"
-                                        >
-                                            <X size={14} />
-                                        </button>
+                                {noteImagePreviews.length > 0 && (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {noteImagePreviews.map((preview, idx) => (
+                                            <div key={idx} className="relative rounded-2xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-800">
+                                                <img src={preview} alt={`preview ${idx + 1}`} className="w-full h-full object-cover rounded-2xl" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(idx)}
+                                                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-all"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
 
@@ -398,17 +420,17 @@ const NotesFeed = ({ user, profile, onFeedsUpdate, onlineUsers, searchQuery }) =
                                         onClick={() => fileInputRef.current?.click()}
                                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-100 dark:border-gray-800 text-gray-500 hover:text-primary hover:border-primary/30 transition-all text-xs font-black uppercase tracking-widest bg-gray-50/50 dark:bg-gray-800/50"
                                     >
-                                        <Image size={16} /> Photo
+                                        <Image size={16} /> Photos {noteImageFiles.length > 0 && `(${noteImageFiles.length})`}
                                     </button>
                                     <input
                                         ref={fileInputRef}
-                                        type="file" accept="image/*" className="hidden"
-                                        onChange={e => {
-                                            const f = e.target.files?.[0];
-                                            if (f) { setNoteImageFile(f); setNoteImagePreview(URL.createObjectURL(f)); }
-                                        }}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleImageSelect}
                                     />
-                                    <button type="submit" disabled={!noteContent.trim() || posting}
+                                    <button type="submit" disabled={(!noteContent.trim() && noteImageFiles.length === 0) || posting}
                                         className="flex-1 max-w-[120px] flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-xl font-bold text-sm disabled:opacity-50 hover:bg-primary/90 transition-all active:scale-[0.98] shadow-lg shadow-primary/20">
                                         {posting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Post
                                     </button>

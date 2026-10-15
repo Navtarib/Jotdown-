@@ -134,17 +134,52 @@ const FeedNoteCard = ({ note, user, isFeedOwner, onlineUsers }) => {
                 )}
             </div>
 
-            {/* Image */}
-            {note.image_url && (
-                <div className="px-4 pt-2">
-                    <img
-                        src={note.image_url}
-                        alt="post"
-                        className="w-full max-h-64 object-cover rounded-2xl cursor-pointer hover:opacity-95 transition-opacity"
-                        onClick={() => window.open(note.image_url, '_blank')}
-                    />
-                </div>
-            )}
+            {/* Images Display */}
+            {(() => {
+                const images = (Array.isArray(note.image_urls) && note.image_urls.length > 0)
+                    ? note.image_urls
+                    : (typeof note.image_urls === 'string' && note.image_urls.startsWith('['))
+                    ? (() => { try { return JSON.parse(note.image_urls); } catch { return []; } })()
+                    : note.image_url
+                    ? [note.image_url]
+                    : [];
+
+                if (images.length === 0) return null;
+
+                return (
+                    <div className="px-4 pt-2">
+                        {images.length === 1 ? (
+                            <img
+                                src={images[0]}
+                                alt="post attachment"
+                                className="w-full max-h-72 object-cover rounded-2xl cursor-pointer hover:opacity-95 transition-opacity"
+                                onClick={() => window.open(images[0], '_blank')}
+                            />
+                        ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                                {images.slice(0, 4).map((url, idx) => (
+                                    <div key={idx} className="relative aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                        <img
+                                            src={url}
+                                            alt={`attachment ${idx + 1}`}
+                                            className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                                            onClick={() => window.open(url, '_blank')}
+                                        />
+                                        {idx === 3 && images.length > 4 && (
+                                            <div
+                                                onClick={() => window.open(images[3], '_blank')}
+                                                className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center text-white font-black text-sm cursor-pointer"
+                                            >
+                                                +{images.length - 3}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Content */}
             <div className="px-4 py-2">

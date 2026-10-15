@@ -9,44 +9,53 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
     const [content, setContent] = useState('');
     const [reminderAt, setReminderAt] = useState('');
     const [isPublic, setIsPublic] = useState(false);
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
+    
+    // Multiple images state
+    const [imageFiles, setImageFiles] = useState([]);
+    const [imagePreviews, setImagePreviews] = useState([]);
+    
     const [uploading, setUploading] = useState(false);
     const containerRef = useRef(null);
     const fileInputRef = useRef(null);
 
     const handleImageSelect = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setImageFile(file);
-        setImagePreview(URL.createObjectURL(file));
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        setImageFiles((prev) => [...prev, ...files]);
+        const newPreviews = files.map((file) => URL.createObjectURL(file));
+        setImagePreviews((prev) => [...prev, ...newPreviews]);
     };
 
-    const removeImage = () => {
-        setImageFile(null);
-        setImagePreview(null);
+    const removeImage = (index) => {
+        setImageFiles((prev) => prev.filter((_, i) => i !== index));
+        setImagePreviews((prev) => prev.filter((_, i) => i !== index));
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const uploadImage = async (file) => {
-        const ext = file.name.split('.').pop();
-        const path = `${user.id}/${Date.now()}.${ext}`;
-        const { error } = await supabase.storage
-            .from('note-images')
-            .upload(path, file, { cacheControl: '3600', upsert: false });
-        if (error) throw error;
-        const { data } = supabase.storage.from('note-images').getPublicUrl(path);
-        return data.publicUrl;
-    };
+    // Upload all images in parallel
+    const uploadImages = useCallback(async (files) => {
+        const uploadPromises = files.map(async (file) => {
+            const ext = file.name.split('.').pop();
+            const path = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+            const { error } = await supabase.storage
+                .from('note-images')
+                .upload(path, file, { cacheControl: '3600', upsert: false });
+            if (error) throw error;
+            const { data } = supabase.storage.from('note-images').getPublicUrl(path);
+            return data.publicUrl;
+        });
+        return await Promise.all(uploadPromises);
+    }, [user.id]);
 
     const saveNote = useCallback(async () => {
-        if (!title.trim() && !content.trim()) return;
+        if (!title.trim() && !content.trim() && imageFiles.length === 0) return;
         setUploading(true);
 
-        let image_url = null;
-        if (imageFile) {
+        let imageUrls = [];
+        if (imageFiles.length > 0) {
             try {
-                image_url = await uploadImage(imageFile);
+                imageUrls = await uploadImages(imageFiles);
             } catch (err) {
                 console.error('Image upload failed:', err.message);
                 alert(`Image upload failed: ${err.message}`);
@@ -66,7 +75,8 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
                 is_public: isPublic,
                 author_name: profile?.display_name || user.email.split('@')[0],
                 author_avatar: profile?.avatar_url || null,
-                image_url,
+                image_urls: imageUrls,
+                image_url: imageUrls[0] || null,
             },
         ]).select();
 
@@ -78,18 +88,20 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
             setContent('');
             setReminderAt('');
             setIsPublic(false);
-            removeImage();
+            setImageFiles([]);
+            setImagePreviews([]);
+            if (fileInputRef.current) fileInputRef.current.value = '';
             if (onNoteCreated && data?.[0]) {
                 onNoteCreated(data[0]);
             }
         }
         setUploading(false);
-    }, [title, content, reminderAt, isPublic, imageFile, user, onNoteCreated]);
+    }, [title, content, reminderAt, isPublic, imageFiles, user, profile, onNoteCreated, uploadImages]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (containerRef.current && !containerRef.current.contains(event.target)) {
-                if (title || content) {
+                if (title || content || imageFiles.length > 0) {
                     saveNote();
                 }
                 setIsExpanded(false);
@@ -97,7 +109,7 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [title, content, saveNote]);
+    }, [title, content, imageFiles, saveNote]);
 
     const handleClose = async () => {
         await saveNote();
@@ -128,22 +140,27 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
                     )}
                 </AnimatePresence>
 
-                {/* Image Preview */}
+                {/* Multiple Images Previews Grid */}
                 <AnimatePresence>
-                    {imagePreview && (
+                    {imagePreviews.length > 0 && (
                         <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="relative mx-5 md:mx-7 mt-3 rounded-2xl overflow-hidden"
+                            className="grid grid-cols-2 sm:grid-cols-3 gap-2 mx-5 md:mx-7 mt-3"
                         >
-                            <img src={imagePreview} alt="preview" className="w-full max-h-56 object-cover rounded-2xl" />
-                            <button
-                                onClick={removeImage}
-                                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-all"
-                            >
-                                <X size={14} />
-                            </button>
+                            {imagePreviews.map((preview, index) => (
+                                <div key={index} className="relative rounded-2xl overflow-hidden aspect-video bg-gray-100 dark:bg-gray-700">
+                                    <img src={preview} alt={`preview-${index}`} className="w-full h-full object-cover" />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeImage(index)}
+                                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-all"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ))}
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -184,19 +201,22 @@ const NoteInput = ({ user, profile, onNoteCreated }) => {
                                     />
                                 </div>
 
-                                {/* Image Upload Button */}
+                                {/* Multiple Photos Button with 'multiple' attribute */}
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
                                     className="flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 text-gray-400 hover:text-primary hover:border-primary/30 transition-all"
                                 >
                                     <Image size={14} />
-                                    <span className="text-[10px] font-black uppercase tracking-widest">Photo</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest">
+                                        Photos {imageFiles.length > 0 && `(${imageFiles.length})`}
+                                    </span>
                                 </button>
                                 <input
                                     ref={fileInputRef}
                                     type="file"
                                     accept="image/*"
+                                    multiple
                                     className="hidden"
                                     onChange={handleImageSelect}
                                 />

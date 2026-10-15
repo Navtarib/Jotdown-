@@ -1,8 +1,8 @@
 {
-    "rewrites": [
-        {
-            "source": "/((?!_.*|.*\\..*|__.*).*)",
-            "destination": "/index.html"
-        }
-    ]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

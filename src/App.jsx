@@ -24,10 +24,15 @@ function App() {
     document.title = "Jotdown";
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } = {} }) => {
+        setSession(session || null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn('Initial session check failed:', err?.message || err);
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
